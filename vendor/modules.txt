@@ -1,0 +1,7 @@
+# github.com/bradfitz/gomemcache v0.0.0-20230905024940-24af94b03874
+## explicit; go 1.18
+github.com/bradfitz/gomemcache/memcache
+# github.com/go-chi/chi/v5 v5.0.12
+## explicit; go 1.14
+github.com/go-chi/chi/v5
+github.com/go-chi/chi/v5/middleware
