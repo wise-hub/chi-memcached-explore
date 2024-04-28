@@ -13,7 +13,9 @@ services:
       - app-network
 
   memcache:
-    image: memcached:alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.memcache
     restart: always
     ports:
       - "11211:11211"

@@ -40,12 +40,6 @@ func hashSHA256(input string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
-func generateAccessToken() string {
-	nanoTime := strconv.FormatInt(time.Now().UnixNano(), 10)
-	token := hashSHA256(nanoTime)
-	return token
-}
-
 func resourceEndpoint(w http.ResponseWriter, r *http.Request) {
 	userDetails, ok := r.Context().Value("userDetails").(AuthMetadata)
 	if !ok {
