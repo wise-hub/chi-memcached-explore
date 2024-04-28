@@ -1,6 +1,7 @@
 version: '3.8'
+
 services:
-  app:
+  chi-app-1:
     build:
       context: .
       dockerfile: Dockerfile.app
@@ -12,10 +13,56 @@ services:
     networks:
       - app-network
 
-  memcache:
+  chi-app-2:
     build:
       context: .
-      dockerfile: Dockerfile.memcache
+      dockerfile: Dockerfile.app
+    ports:
+      - "8081:8080"
+    depends_on:
+      - memcache
+    restart: always
+    networks:
+      - app-network
+
+  chi-app-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    ports:
+      - "8082:8080"
+    depends_on:
+      - memcache
+    restart: always
+    networks:
+      - app-network
+
+  chi-app-4:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    ports:
+      - "8083:8080"
+    depends_on:
+      - memcache
+    restart: always
+    networks:
+      - app-network
+
+  chi-app-5:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    ports:
+      - "8084:8080"
+    depends_on:
+      - memcache
+    restart: always
+    networks:
+      - app-network
+
+  memcache:
+    image: memcached:latest
     restart: always
     ports:
       - "11211:11211"

@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"crypto/aes"
@@ -34,13 +34,22 @@ func init() {
 	}
 }
 
+func zeroBytes(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}
+
 func Encrypt(text string) (string, error) {
 	if block == nil {
 		return "", blockErr
 	}
 
 	bs := pool.Get().(*bufferStruct)
-	defer pool.Put(bs)
+	defer func() {
+		zeroBytes(*bs.buf)
+		pool.Put(bs)
+	}()
 
 	iv := (*bs.buf)[:aes.BlockSize]
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {

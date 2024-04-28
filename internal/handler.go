@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"context"
@@ -12,15 +12,7 @@ import (
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
-
-var mc *memcache.Client
-
-func init() {
-	mc = memcache.New("memcache:11211")
-}
 
 type User struct {
 	Username string `json:"username"`
@@ -40,7 +32,7 @@ func hashSHA256(input string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
-func resourceEndpoint(w http.ResponseWriter, r *http.Request) {
+func ResourceEndpoint(w http.ResponseWriter, r *http.Request) {
 	userDetails, ok := r.Context().Value("userDetails").(AuthMetadata)
 	if !ok {
 		httpError(w, http.StatusInternalServerError, "Invalid session data")
@@ -60,8 +52,6 @@ func httpError(w http.ResponseWriter, code int, message string) {
 }
 
 func authenticate(user User) (bool, AuthMetadata) {
-
-	// mock authentication service
 	if user.Username == "john" && user.Password == "pwd123" {
 		authMedatada := AuthMetadata{
 			Username:     user.Username,
@@ -74,7 +64,7 @@ func authenticate(user User) (bool, AuthMetadata) {
 	return false, AuthMetadata{}
 }
 
-func loginEndpoint(w http.ResponseWriter, r *http.Request) {
+func LoginEndpoint(w http.ResponseWriter, r *http.Request) {
 	var user User
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
@@ -89,15 +79,17 @@ func loginEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token := hashSHA256(strconv.FormatInt(time.Now().UnixNano(), 10))
-
 	allowedPages := strings.Join(authMetadata.AllowedPages, ",")
 	serializedSession := fmt.Sprintf("%s|%s|%s|%s|%s", authMetadata.Username, authMetadata.UserId, authMetadata.Role, allowedPages, hashSHA256(token))
 
+	mc := memcachePool.getClient()
 	err = mc.Set(&memcache.Item{
 		Key:        authMetadata.UserId,
 		Value:      []byte(serializedSession),
 		Expiration: 60 * 30,
 	})
+	memcachePool.releaseClient(mc)
+
 	if err != nil {
 		httpError(w, http.StatusInternalServerError, "Failed to connect to Memcache server")
 		fmt.Println(err)
@@ -113,9 +105,8 @@ func loginEndpoint(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, map[string]string{"accessToken": encryptedUserId + "." + token})
 }
 
-func authMiddleware(next http.Handler) http.Handler {
+func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		tokenParts := strings.Split(string(r.Header.Get("X-ACCESS-TOKEN")), ".")
 		if len(tokenParts) != 2 {
 			httpError(w, http.StatusUnauthorized, "Invalid token data")
@@ -128,7 +119,9 @@ func authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		mc := memcachePool.getClient()
 		item, err := mc.Get(decryptedUserId)
+		memcachePool.releaseClient(mc)
 		if err != nil {
 			httpError(w, http.StatusUnauthorized, "Session expired or not found")
 			return
@@ -157,13 +150,4 @@ func authMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), "userDetails", authMetadata)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-func main() {
-	router := chi.NewRouter()
-	router.Use(middleware.Logger)
-	router.Post("/api/login", loginEndpoint)
-	router.With(authMiddleware).Get("/api/resource", resourceEndpoint)
-	fmt.Println("Starting server...")
-	http.ListenAndServe(":8080", router)
 }
