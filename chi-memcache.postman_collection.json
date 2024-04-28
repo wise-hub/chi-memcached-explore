@@ -1,0 +1,62 @@
+{
+	"info": {
+		"_postman_id": "8d29205e-036d-4064-bcce-fde446c24ba8",
+		"name": "chi-memcache",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "localhost:8080/api/login",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"john\",\n    \"password\": \"pwd123\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:8080/api/login",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "localhost:8080/api/resource",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-ACCESS-TOKEN",
+						"value": "66143996de84893f64b0845cebd00b88a82e00aec229.73957aa2adc0266da8fb9f60f7f592753dd7aeb1b9947ab1664a32d9a7623feb",
+						"type": "default"
+					}
+				],
+				"url": {
+					"raw": "localhost:8080/api/resource",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"resource"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

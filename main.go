@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
@@ -18,7 +19,7 @@ import (
 var mc *memcache.Client
 
 func init() {
-	mc = memcache.New("localhost:11211")
+	mc = memcache.New("memcache:11211")
 }
 
 type User struct {
@@ -26,15 +27,9 @@ type User struct {
 	Password string `json:"password"`
 }
 
-type UserSession struct {
+type AuthMetadata struct {
 	Username     string   `json:"username"`
-	Role         string   `json:"role"`
-	AllowedPages []string `json:"allowedPages"`
-	Token        string   `json:"token"`
-}
-
-type AuthResponse struct {
-	Username     string   `json:"username"`
+	UserId       string   `json:"userId"`
 	Role         string   `json:"role"`
 	AllowedPages []string `json:"allowedPages"`
 }
@@ -52,7 +47,7 @@ func generateAccessToken() string {
 }
 
 func resourceEndpoint(w http.ResponseWriter, r *http.Request) {
-	userDetails, ok := r.Context().Value("userDetails").(AuthResponse)
+	userDetails, ok := r.Context().Value("userDetails").(AuthMetadata)
 	if !ok {
 		httpError(w, http.StatusInternalServerError, "Invalid session data")
 		return
@@ -60,14 +55,29 @@ func resourceEndpoint(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, userDetails)
 }
 
-func httpError(w http.ResponseWriter, code int, message string) {
-	respondWithJSON(w, code, map[string]string{"error": message})
-}
-
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(payload)
+}
+
+func httpError(w http.ResponseWriter, code int, message string) {
+	respondWithJSON(w, code, map[string]string{"error": message})
+}
+
+func authenticate(user User) (bool, AuthMetadata) {
+
+	// mock authentication service
+	if user.Username == "john" && user.Password == "pwd123" {
+		authMedatada := AuthMetadata{
+			Username:     user.Username,
+			UserId:       "123456",
+			Role:         "admin",
+			AllowedPages: []string{"/dashboard", "/settings"},
+		}
+		return true, authMedatada
+	}
+	return false, AuthMetadata{}
 }
 
 func loginEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -78,76 +88,88 @@ func loginEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if authenticate(user) {
-		token, session := createSession(user)
-		storeSession(user.Username, session)
-		respondWithJSON(w, http.StatusOK, map[string]string{"token": token})
-	} else {
+	authSuccess, authMetadata := authenticate(user)
+	if !authSuccess {
 		httpError(w, http.StatusUnauthorized, "Invalid credentials")
+		return
 	}
-}
 
-func authenticate(user User) bool {
-	return user.Username == "john" && user.Password == "pwd123"
-}
+	token := hashSHA256(strconv.FormatInt(time.Now().UnixNano(), 10))
 
-func createSession(user User) (string, UserSession) {
-	token := generateAccessToken()
-	session := UserSession{
-		Username:     user.Username,
-		Role:         "admin",
-		AllowedPages: []string{"/dashboard", "/settings"},
-		Token:        hashSHA256(token),
+	allowedPages := strings.Join(authMetadata.AllowedPages, ",")
+	serializedSession := fmt.Sprintf("%s|%s|%s|%s|%s", authMetadata.Username, authMetadata.UserId, authMetadata.Role, allowedPages, hashSHA256(token))
+
+	err = mc.Set(&memcache.Item{
+		Key:        authMetadata.UserId,
+		Value:      []byte(serializedSession),
+		Expiration: 60 * 30,
+	})
+	if err != nil {
+		httpError(w, http.StatusInternalServerError, "Failed to connect to Memcache server")
+		fmt.Println(err)
+		return
 	}
-	return token, session
+
+	encryptedUserId, err := Encrypt(authMetadata.UserId)
+	if err != nil {
+		httpError(w, http.StatusInternalServerError, "Failed to encrypt user data")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{"accessToken": encryptedUserId + "." + token})
 }
 
-func storeSession(username string, session UserSession) {
-	data, _ := json.Marshal(session)
-	mc.Set(&memcache.Item{Key: hashSHA256(username), Value: data, Expiration: 1800})
-}
-
-func AuthMiddleware(next http.Handler) http.Handler {
+func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("X-AUTH")
-		username := r.Header.Get("X-USER")
 
-		session, err := retrieveSession(username)
+		tokenParts := strings.Split(string(r.Header.Get("X-ACCESS-TOKEN")), ".")
+		if len(tokenParts) != 2 {
+			httpError(w, http.StatusUnauthorized, "Invalid token data")
+			return
+		}
+
+		decryptedUserId, err := Decrypt(tokenParts[0])
+		if err != nil {
+			httpError(w, http.StatusUnauthorized, "Failed to decrypt user data")
+			return
+		}
+
+		item, err := mc.Get(decryptedUserId)
 		if err != nil {
 			httpError(w, http.StatusUnauthorized, "Session expired or not found")
 			return
 		}
 
-		if session.Token != hashSHA256(token) {
+		parts := strings.Split(string(item.Value), "|")
+		if len(parts) != 5 {
+			httpError(w, http.StatusUnauthorized, "Invalid session data")
+			return
+		}
+
+		if parts[4] != hashSHA256(tokenParts[1]) {
 			httpError(w, http.StatusUnauthorized, "Invalid session or token")
 			return
 		}
 
-		authResponse := AuthResponse{
-			Username:     session.Username,
-			Role:         session.Role,
-			AllowedPages: session.AllowedPages,
+		allowedPages := strings.Split(parts[3], ",")
+
+		authMetadata := AuthMetadata{
+			Username:     parts[0],
+			UserId:       parts[1],
+			Role:         parts[2],
+			AllowedPages: allowedPages,
 		}
-		ctx := context.WithValue(r.Context(), "userDetails", authResponse)
+
+		ctx := context.WithValue(r.Context(), "userDetails", authMetadata)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-func retrieveSession(username string) (UserSession, error) {
-	data, err := mc.Get(hashSHA256(username))
-	if err != nil {
-		return UserSession{}, err
-	}
-	var session UserSession
-	json.Unmarshal(data.Value, &session)
-	return session, nil
 }
 
 func main() {
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
 	router.Post("/api/login", loginEndpoint)
-	router.With(AuthMiddleware).Get("/api/resource", resourceEndpoint)
+	router.With(authMiddleware).Get("/api/resource", resourceEndpoint)
 	fmt.Println("Starting server...")
 	http.ListenAndServe(":8080", router)
 }
