@@ -20,11 +20,11 @@
 					}
 				},
 				"url": {
-					"raw": "localhost:8080/api/login",
+					"raw": "localhost:8888/api/login",
 					"host": [
 						"localhost"
 					],
-					"port": "8080",
+					"port": "8888",
 					"path": [
 						"api",
 						"login"
@@ -34,22 +34,22 @@
 			"response": []
 		},
 		{
-			"name": "localhost:8080/api/resource",
+			"name": "localhost:8888/api/resource",
 			"request": {
 				"method": "GET",
 				"header": [
 					{
 						"key": "X-ACCESS-TOKEN",
-						"value": "66143996de84893f64b0845cebd00b88a82e00aec229.73957aa2adc0266da8fb9f60f7f592753dd7aeb1b9947ab1664a32d9a7623feb",
+						"value": "414560ae0aeb2a9684e16b40d3c6030d5c518f615f94.7875331345834ec3a317101966636651e3f9e6e7aaa05717a6a5e68aa77ed28f",
 						"type": "default"
 					}
 				],
 				"url": {
-					"raw": "localhost:8080/api/resource",
+					"raw": "localhost:8888/api/resource",
 					"host": [
 						"localhost"
 					],
-					"port": "8080",
+					"port": "8888",
 					"path": [
 						"api",
 						"resource"

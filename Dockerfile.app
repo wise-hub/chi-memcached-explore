@@ -1,7 +1,8 @@
 FROM scratch
 
-COPY bin/app /app
+COPY bin/app bin/app
+COPY .env .env
 
 EXPOSE 8080
 
-CMD ["/app"]
+CMD ["bin/app"]

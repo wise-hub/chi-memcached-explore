@@ -3,6 +3,9 @@ exploratory project for server-side in-memory session persistence
 ```
 APACHE BENCH
 
+chmod +x ab_test.sh
+
+
 ulimit -n 65536
 
 ab -n 1000000 -c 1000 -T 'application/json' -p ab_loadtest_payload.json http://localhost:8888/api/login
